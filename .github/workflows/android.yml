@@ -25,8 +25,8 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Confirm Android SDK from hosted runner
+        run: test -d "$ANDROID_HOME" && echo "Android SDK: $ANDROID_HOME"
       - name: Build signed debug APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Verify APK artifact
