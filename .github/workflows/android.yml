@@ -33,6 +33,24 @@ jobs:
         run: gradle --no-daemon :app:assembleDebug
       - name: Verify APK artifact
         run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Package Pink Monet source patch
+        run: |
+          zip -q Zaid-Hack-App-Monet-Pink-Patch.zip \
+            app/src/main/java/com/zaidhack/pink/MainActivity.kt \
+            app/src/main/java/com/zaidhack/pink/ui/theme/ZaidHackTheme.kt \
+            app/src/main/res/drawable/logo_zh.webp \
+            app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml \
+            app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml \
+            app/src/main/res/values/colors.xml \
+            app/src/main/AndroidManifest.xml \
+            app/build.gradle.kts \
+            patches/pink-monet/README.md
+      - name: Upload Pink Monet patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zaid-Hack-Monet-Pink-Patch
+          path: Zaid-Hack-App-Monet-Pink-Patch.zip
+          if-no-files-found: error
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:

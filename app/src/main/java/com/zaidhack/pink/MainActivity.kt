@@ -9,6 +9,7 @@ import android.util.Base64
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.BorderStroke
 import androidx.compose.foundation.layout.*
 import androidx.compose.foundation.rememberScrollState
@@ -18,6 +19,10 @@ import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
 import androidx.compose.ui.Alignment
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.layout.ContentScale
+import androidx.compose.ui.res.painterResource
+import com.zaidhack.pink.ui.theme.ZaidHackTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
@@ -37,11 +42,11 @@ import java.security.MessageDigest
 import java.time.OffsetDateTime
 import javax.net.ssl.HttpsURLConnection
 
-private val Background = Color(0xFF180F1D)
-private val CardColor = Color(0xFF302036)
-private val Pink = Color(0xFFF8A1CE)
-private val Pale = Color(0xFFFFDBED)
-private val Muted = Color(0xFFD0ACBF)
+private val Background = Color(0xFF180F1B)
+private val CardColor = Color(0xFF291A2B)
+private val Pink = Color(0xFFF4ACD4)
+private val Pale = Color(0xFFFFDDED)
+private val Muted = Color(0xFFD4B8CB)
 private const val LICENSE_URL = "https://zzlvupunploglgxbgllm.supabase.co/functions/v1/zh-license"
 private const val GAME_PACKAGE = "com.dts.freefireth"
 
@@ -72,13 +77,7 @@ class MainActivity : ComponentActivity() {
         keyText = prefs.getString("key", "") ?: ""
         expiry = prefs.getLong("expiry", 0)
         setContent {
-            MaterialTheme(
-                colorScheme = darkColorScheme(
-                    primary = Pink, onPrimary = Color(0xFF3F1630),
-                    secondary = Color(0xFFE899BD), background = Background,
-                    surface = CardColor, onSurface = Pale, onBackground = Pale
-                )
-            ) {
+            ZaidHackTheme {
                 MainScreen()
             }
         }
@@ -107,15 +106,48 @@ class MainActivity : ComponentActivity() {
                 remaining / 86400, remaining / 3600 % 24,
                 remaining / 60 % 60, remaining % 60
             )
-        Scaffold(containerColor = Background) { padding ->
+        Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding)
                     .verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
-                Text("ZAID HACK", color = Pink, fontSize = 13.sp, fontWeight = FontWeight.Bold)
-                Text("Pink Edition", color = Pale, fontSize = 30.sp, fontWeight = FontWeight.Bold)
-                Text("Android 12+  ·  ARM64  ·  Root", color = Muted)
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(14.dp)
+                ) {
+                    Image(
+                        painter = painterResource(R.drawable.logo_zh),
+                        contentDescription = "Logo Zaid Hack",
+                        contentScale = ContentScale.Crop,
+                        modifier = Modifier.size(84.dp).clip(RoundedCornerShape(25.dp))
+                    )
+                    Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                        Text("ZAID HACK", color = MaterialTheme.colorScheme.primary,
+                            style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                        Text("Pink Monet", color = MaterialTheme.colorScheme.onBackground,
+                            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text("Android 12+ · ARM64 · Root",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
+                    }
+                }
+                Surface(
+                    color = MaterialTheme.colorScheme.primaryContainer,
+                    shape = RoundedCornerShape(28.dp),
+                    modifier = Modifier.fillMaxWidth()
+                ) {
+                    Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text("LICENCIA · TIEMPO RESTANTE",
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.78f),
+                            style = MaterialTheme.typography.labelSmall)
+                        Text(countdown, color = MaterialTheme.colorScheme.onPrimaryContainer,
+                            style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                        Text("Se verifica con Supabase antes de iniciar",
+                            color = MaterialTheme.colorScheme.onPrimaryContainer.copy(alpha = 0.80f),
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
                 CardBlock {
                     Text("Estado del dispositivo", fontWeight = FontWeight.SemiBold, color = Pale)
                     Spacer(Modifier.height(8.dp))
@@ -126,7 +158,7 @@ class MainActivity : ComponentActivity() {
                         Text("SHA-256: " + importedHash.take(18) + "…", color = Muted, fontSize = 11.sp)
                     }
                     Spacer(Modifier.height(6.dp))
-                    Button(
+                    FilledTonalButton(
                         onClick = { picker.launch(arrayOf("*/*")) },
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth()
@@ -135,8 +167,7 @@ class MainActivity : ComponentActivity() {
                 CardBlock {
                     Text("Licencia ZH", color = Pale, fontWeight = FontWeight.SemiBold)
                     Spacer(Modifier.height(8.dp))
-                    Text(countdown, color = Pink, fontSize = 23.sp, fontWeight = FontWeight.Bold)
-                    Text("Vencimiento local mostrado; se valida en Supabase al activar o iniciar.", color = Muted, fontSize = 12.sp)
+                    Text("Introduce tu key para activar o revisar la vigencia.", color = Muted, fontSize = 12.sp)
                     Spacer(Modifier.height(8.dp))
                     OutlinedTextField(
                         value = keyText,
@@ -144,7 +175,8 @@ class MainActivity : ComponentActivity() {
                         singleLine = true,
                         label = { Text("ZH-XXXX-XXXX-XXXX") },
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
-                        modifier = Modifier.fillMaxWidth()
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp)
                     )
                     Spacer(Modifier.height(8.dp))
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -196,13 +228,13 @@ class MainActivity : ComponentActivity() {
 
     @Composable
     private fun CardBlock(content: @Composable ColumnScope.() -> Unit) {
-        Card(
-            colors = CardDefaults.cardColors(containerColor = CardColor),
-            shape = RoundedCornerShape(24.dp),
-            border = BorderStroke(1.dp, Color(0xFF5F3C58)),
+        ElevatedCard(
+            colors = CardDefaults.elevatedCardColors(containerColor = MaterialTheme.colorScheme.surfaceContainer),
+            shape = RoundedCornerShape(28.dp),
+            elevation = CardDefaults.elevatedCardElevation(defaultElevation = 2.dp),
             modifier = Modifier.fillMaxWidth()
         ) {
-            Column(modifier = Modifier.padding(17.dp), content = content)
+            Column(modifier = Modifier.padding(19.dp), content = content)
         }
     }
 
