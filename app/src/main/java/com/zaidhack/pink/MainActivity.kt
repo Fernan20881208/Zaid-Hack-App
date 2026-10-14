@@ -29,6 +29,8 @@ import com.zaidhack.pink.ui.theme.ZaidHackTheme
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.input.PasswordVisualTransformation
+import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.input.KeyboardCapitalization
 import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
@@ -73,6 +75,7 @@ class MainActivity : ComponentActivity() {
     private var keyText by mutableStateOf("")
     private var expiry by mutableLongStateOf(0L)
     private var liveStatus by mutableStateOf("Sin comprobar")
+    private var diagnosticDraft by mutableStateOf("")
     private var notificationsAllowed by mutableStateOf(false)
     private var freshServerTime by mutableLongStateOf(0L)
     private var verifiedElapsedMs by mutableLongStateOf(0L)
@@ -84,6 +87,20 @@ class MainActivity : ComponentActivity() {
     private val alertPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
         notificationsAllowed = granted
         log = if (granted) "Notificaciones permitidas." else "No se concedió permiso de notificaciones."
+    }
+    private val documentPicker = registerForActivityResult(ActivityResultContracts.CreateDocument("text/plain")) { uri ->
+        if (uri != null) {
+            try {
+                contentResolver.openOutputStream(uri)?.use { out ->
+                    out.write(diagnosticDraft.toByteArray(Charsets.UTF_8))
+                } ?: error("No se pudo abrir el documento")
+                log = "Informe de diagnóstico guardado correctamente."
+            } catch (e: Exception) {
+                log = "Error al guardar diagnóstico: " + (e.message ?: "desconocido")
+            } finally {
+                diagnosticDraft = ""
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -121,6 +138,7 @@ class MainActivity : ComponentActivity() {
         } else now
         val remaining = (expiry - effectiveNow).coerceAtLeast(0L)
         var currentTab by rememberSaveable { mutableIntStateOf(0) }
+        var showKey by rememberSaveable { mutableStateOf(false) }
         var alertedHour by remember { mutableStateOf(false) }
         var alertedFiveMinutes by remember { mutableStateOf(false) }
         LaunchedEffect(rootReady) {
@@ -178,7 +196,7 @@ class MainActivity : ComponentActivity() {
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text("ZAID HACK", color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        Text("Pink Monet", color = MaterialTheme.colorScheme.onBackground,
+                        Text("Pink Control v1.3", color = MaterialTheme.colorScheme.onBackground,
                             style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                         Text("Android 12+ · ARM64 · Root",
                             color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -215,7 +233,7 @@ class MainActivity : ComponentActivity() {
                         onClick = { picker.launch(arrayOf("*/*")) },
                         enabled = !busy,
                         modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (imported) "Cambiar archivo .sh" else "Importar Zaid-Hack-v1.3.sh") }
+                    ) { Text(if (imported) "Cambiar archivo .sh" else "Importar script Zaid Hack (.sh)") }
                 }
                 CardBlock {
                     Text("Licencia ZH", color = Pale, fontWeight = FontWeight.SemiBold)
@@ -228,6 +246,12 @@ class MainActivity : ComponentActivity() {
                         singleLine = true,
                         label = { Text("ZH-XXXX-XXXX-XXXX") },
                         keyboardOptions = KeyboardOptions(capitalization = KeyboardCapitalization.Characters),
+                        visualTransformation = if (showKey) VisualTransformation.None else PasswordVisualTransformation(),
+                        trailingIcon = {
+                            TextButton(onClick = { showKey = !showKey }) {
+                                Text(if (showKey) "Ocultar" else "Mostrar")
+                            }
+                        },
                         modifier = Modifier.fillMaxWidth(),
                         shape = RoundedCornerShape(18.dp)
                     )
@@ -287,12 +311,27 @@ class MainActivity : ComponentActivity() {
                     CardBlock {
                         Text("Diagnóstico en vivo", color = Pale, style = MaterialTheme.typography.titleLarge)
                         Text("Estado: " + liveStatus, color = MaterialTheme.colorScheme.primary)
+                        Text("Consulta cada 5 segundos mientras la app está abierta.", color = Muted, fontSize = 12.sp)
                         Text("Root: " + if (rootReady) "Concedido" else "No disponible", color = Muted)
                         Text("ABI: " + Build.SUPPORTED_ABIS.joinToString(), color = Muted)
                         Text("Android: " + Build.VERSION.RELEASE, color = Muted)
                         Button(onClick = { runJob("Revisar procesos y logs") {
                             root("id; cat /proc/uptime; tail -n 30 /data/local/tmp/overlay.log; tail -n 20 /data/local/tmp/zaid_license_watch.log").description()
                         } }, enabled = !busy && rootReady, modifier = Modifier.fillMaxWidth()) { Text("Actualizar diagnóstico") }
+                        FilledTonalButton(
+                            onClick = { exportDiagnostics() },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Exportar diagnóstico sin datos de licencia") }
+                        OutlinedButton(
+                            onClick = { runJob("Comprobar root") {
+                                val result = root("id -u")
+                                rootReady = result.exit == 0 && result.output.trim() == "0"
+                                "Root: " + if (rootReady) "Autorizado" else "Denegado"
+                            } },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text("Volver a comprobar root") }
                         if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
                         Text(log, color = Muted, fontSize = 12.sp)
                     }
@@ -457,7 +496,7 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun startNow(): String {
-        require(imported) { "Importa primero Zaid-Hack-v1.3.sh." }
+        require(imported) { "Importa primero tu script Zaid Hack (.sh)." }
         require(Build.SUPPORTED_ABIS.contains("arm64-v8a")) { "Requiere procesador ARM64." }
         val savedKey = SecureLicenseStore.read(this) ?: ""
         require(savedKey.isNotBlank()) { "Activa primero tu licencia ZH." }
@@ -501,6 +540,48 @@ class MainActivity : ComponentActivity() {
             "*) echo detenido;; esac"
         val result = root(command)
         return if (result.exit == 0) result.output.trim().take(160) else "No disponible"
+    }
+
+    private fun exportDiagnostics() {
+        if (busy) return
+        lifecycleScope.launch {
+            busy = true
+            log = "Preparando informe seguro..."
+            try {
+                diagnosticDraft = withContext(Dispatchers.IO) {
+                    val result = if (rootReady) root(
+                        "id -u; cat /proc/uptime; " +
+                        "p=\$(cat /data/local/tmp/zaid_overlay.pid 2>/dev/null); " +
+                        "case \"\$p\" in ''|*[!0-9]*) echo 'Overlay sin PID';; " +
+                        "*) readlink /proc/\$p/exe 2>/dev/null; grep VmRSS /proc/\$p/status 2>/dev/null;; esac; " +
+                        "tail -n 20 /data/local/tmp/overlay.log 2>/dev/null; " +
+                        "tail -n 15 /data/local/tmp/zaid_license_watch.log 2>/dev/null"
+                    ) else CommandResult(1, "Root no autorizado")
+                    val cleaned = result.output
+                        .replace(Regex("ZH-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}"), "ZH-****-****-****")
+                        .replace(Regex("(?i)(key|token|secret)[=:][^\\s,;]+"), "$1=[OCULTO]")
+                    buildString {
+                        appendLine("Zaid Hack Pink Control v1.3")
+                        appendLine("Android: " + Build.VERSION.RELEASE)
+                        appendLine("ABI: " + Build.SUPPORTED_ABIS.joinToString())
+                        appendLine("Root: " + if (rootReady) "Sí" else "No")
+                        appendLine("Overlay importado: " + imported)
+                        appendLine("SHA-256 ELF: " + importedHash)
+                        appendLine("Estado: " + liveStatus)
+                        appendLine()
+                        appendLine("Salida de diagnóstico (sin key):")
+                        append(cleaned)
+                    }
+                }
+                documentPicker.launch("Zaid-Hack-Diagnostico-v1.3.txt")
+                log = "Elige dónde guardar el informe."
+            } catch (e: Exception) {
+                diagnosticDraft = ""
+                log = "Error de diagnóstico: " + (e.message ?: "desconocido")
+            } finally {
+                busy = false
+            }
+        }
     }
 
     private fun root(command: String): CommandResult {
