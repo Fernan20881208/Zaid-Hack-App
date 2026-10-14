@@ -29,3 +29,10 @@ El workflow `.github/workflows/android.yml` compila `assembleDebug` con Gradle 8
 - Al vencer la key se supervisa el PID del overlay con un proceso root; Android puede retrasar el vigilante si suspende sus procesos. No es un mecanismo infalible contra manipulación de la hora.
 - Importar un ELF y ejecutarlo como root es una operación de alto riesgo: utiliza únicamente scripts propios y de confianza.
 - La compilación de GitHub Actions valida que la APK se construye, pero **no prueba** root, compatibilidad gráfica, kernel ni la ejecución del juego en hardware real.
+
+
+## Pink Monet v1.1
+
+Logo ZH minimalista, icono adaptable y diseño de tarjetas Material You en rosa.
+El proyecto mantiene el soporte para Android 12+ ARM64 y root.
+Descarga el APK actualizado y el patch ZIP desde la última compilación de **Actions**.
