@@ -36,3 +36,13 @@ El workflow `.github/workflows/android.yml` compila `assembleDebug` con Gradle 8
 Logo ZH minimalista, icono adaptable y diseño de tarjetas Material You en rosa.
 El proyecto mantiene el soporte para Android 12+ ARM64 y root.
 Descarga el APK actualizado y el patch ZIP desde la última compilación de **Actions**.
+
+## Pink Control Center v1.3
+
+- Campo ZH oculto por defecto, con botón para mostrar u ocultar.
+- Pestaña **Diagnóstico** con actualización del estado, comprobación de root y exportación .txt mediante el selector de archivos de Android (sin permiso global de almacenamiento).
+- Importación local de scripts Zaid Hack v1.3 y v1.5 que utilicen el formato de payload `__PAYLOAD__` + ELF64 ARM64.
+- El informe intenta ocultar keys y secretos; revísalo antes de compartirlo.
+- Versión mínima Android 12, ABI `arm64-v8a`; requiere `su` autorizado.
+
+El script SH v1.5 completo se distribuye por separado: **no se incluye su ELF privado en GitHub**. La compilación de Actions no equivale a prueba en dispositivo real.
