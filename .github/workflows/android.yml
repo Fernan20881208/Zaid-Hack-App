@@ -26,7 +26,9 @@ jobs:
         with:
           gradle-version: '8.10.2'
       - name: Confirm Android SDK from hosted runner
-        run: test -d "$ANDROID_HOME" && echo "Android SDK: $ANDROID_HOME"
+        run: |
+          test -d "$ANDROID_HOME"
+          echo "SDK is available"
       - name: Build signed debug APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Verify APK artifact
