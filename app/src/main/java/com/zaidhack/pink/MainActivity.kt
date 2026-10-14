@@ -1,5 +1,7 @@
 package com.zaidhack.pink
 
+import android.Manifest
+import android.os.SystemClock
 import android.content.SharedPreferences
 import android.net.Uri
 import android.os.Build
@@ -18,6 +20,7 @@ import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.foundation.verticalScroll
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
+import androidx.compose.runtime.saveable.rememberSaveable
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.layout.ContentScale
@@ -53,7 +56,12 @@ private const val GAME_PACKAGE = "com.dts.freefireth"
 private data class CommandResult(val exit: Int, val output: String) {
     fun description(): String = "Exit: " + exit + "\n" + output
 }
-private data class LicenseResult(val expiry: Long, val expiresAt: String)
+private data class LicenseResult(
+    val expiry: Long,
+    val expiresAt: String,
+    val serverEpoch: Long,
+    val validatedElapsedMs: Long
+)
 
 class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
@@ -64,9 +72,18 @@ class MainActivity : ComponentActivity() {
     private var log by mutableStateOf("Importa el Zaid-Hack-v1.3.sh desde Descargas para comenzar.")
     private var keyText by mutableStateOf("")
     private var expiry by mutableLongStateOf(0L)
+    private var liveStatus by mutableStateOf("Sin comprobar")
+    private var notificationsAllowed by mutableStateOf(false)
+    private var freshServerTime by mutableLongStateOf(0L)
+    private var verifiedElapsedMs by mutableLongStateOf(0L)
+
 
     private val picker = registerForActivityResult(ActivityResultContracts.OpenDocument()) { uri ->
         if (uri != null) runJob("Importar script") { importScript(uri) }
+    }
+    private val alertPermission = registerForActivityResult(ActivityResultContracts.RequestPermission()) { granted ->
+        notificationsAllowed = granted
+        log = if (granted) "Notificaciones permitidas." else "No se concedió permiso de notificaciones."
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -74,8 +91,9 @@ class MainActivity : ComponentActivity() {
         prefs = getSharedPreferences("zh_local", MODE_PRIVATE)
         imported = File(filesDir, "overlay-arm64").exists()
         importedHash = prefs.getString("elf_sha", "") ?: ""
-        keyText = prefs.getString("key", "") ?: ""
+        keyText = SecureLicenseStore.read(this) ?: ""
         expiry = prefs.getLong("expiry", 0)
+        notificationsAllowed = LicenseNotifications.permitted(this)
         setContent {
             ZaidHackTheme {
                 MainScreen()
@@ -98,7 +116,28 @@ class MainActivity : ComponentActivity() {
                 delay(1000)
             }
         }
-        val remaining = (expiry - now).coerceAtLeast(0L)
+        val effectiveNow = if (freshServerTime > 0L && verifiedElapsedMs > 0L) {
+            freshServerTime + ((SystemClock.elapsedRealtime() - verifiedElapsedMs).coerceAtLeast(0L) / 1000L)
+        } else now
+        val remaining = (expiry - effectiveNow).coerceAtLeast(0L)
+        var currentTab by rememberSaveable { mutableIntStateOf(0) }
+        var alertedHour by remember { mutableStateOf(false) }
+        var alertedFiveMinutes by remember { mutableStateOf(false) }
+        LaunchedEffect(rootReady) {
+            while (rootReady) {
+                liveStatus = withContext(Dispatchers.IO) { queryOverlayStatus() }
+                delay(5000)
+            }
+        }
+        LaunchedEffect(remaining, expiry) {
+            if (expiry > 0L && remaining in 1..300 && !alertedFiveMinutes) {
+                LicenseNotifications.show(this@MainActivity, "Key ZH próxima a vencer", "Quedan menos de 5 minutos.")
+                alertedFiveMinutes = true
+            } else if (expiry > 0L && remaining in 301..3600 && !alertedHour) {
+                LicenseNotifications.show(this@MainActivity, "Licencia ZH", "Queda menos de 1 hora.")
+                alertedHour = true
+            }
+        }
         val countdown = if (expiry <= 0L) "Sin verificar"
             else if (remaining == 0L) "Licencia vencida"
             else String.format(
@@ -106,12 +145,25 @@ class MainActivity : ComponentActivity() {
                 remaining / 86400, remaining / 3600 % 24,
                 remaining / 60 % 60, remaining % 60
             )
-        Scaffold(containerColor = MaterialTheme.colorScheme.background) { padding ->
+        Scaffold(
+            containerColor = MaterialTheme.colorScheme.background,
+            bottomBar = {
+                NavigationBar(containerColor = MaterialTheme.colorScheme.surface) {
+                    NavigationBarItem(selected = currentTab == 0, onClick = { currentTab = 0 },
+                        icon = { Text("⌂", style = MaterialTheme.typography.titleLarge) }, label = { Text("Inicio") })
+                    NavigationBarItem(selected = currentTab == 1, onClick = { currentTab = 1 },
+                        icon = { Text("≡", style = MaterialTheme.typography.titleLarge) }, label = { Text("Diagnóstico") })
+                    NavigationBarItem(selected = currentTab == 2, onClick = { currentTab = 2 },
+                        icon = { Text("⚙", style = MaterialTheme.typography.titleLarge) }, label = { Text("Ajustes") })
+                }
+            }
+        ) { padding ->
             Column(
                 modifier = Modifier.fillMaxSize().padding(padding)
                     .verticalScroll(rememberScrollState()).padding(20.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
+                if (currentTab == 0) {
                 Row(
                     modifier = Modifier.fillMaxWidth(),
                     verticalAlignment = Alignment.CenterVertically,
@@ -154,6 +206,7 @@ class MainActivity : ComponentActivity() {
                     Text(if (rootReady) "● Root autorizado" else "○ Root pendiente", color = if (rootReady) Pink else Muted)
                     Text(if (Build.SUPPORTED_ABIS.contains("arm64-v8a")) "● ARM64 compatible" else "○ Requiere ARM64", color = Muted)
                     Text(if (imported) "● Ejecutable importado" else "○ Falta importar tu script", color = Muted)
+                    Text("Overlay: " + liveStatus, color = Muted, fontSize = 12.sp)
                     if (importedHash.isNotBlank()) {
                         Text("SHA-256: " + importedHash.take(18) + "…", color = Muted, fontSize = 11.sp)
                     }
@@ -185,10 +238,13 @@ class MainActivity : ComponentActivity() {
                         }
                         OutlinedButton(onClick = {
                             runJob("Salir de la licencia") {
-                                prefs.edit().remove("key").remove("expiry").apply()
-                                expiry = 0L
                                 val result = if (rootReady) stopNow() else CommandResult(0, "Sin root")
-                                "Key local eliminada (no revoca la del servidor).\n" + result.description()
+                                require(result.exit == 0) { "No se pudo detener el overlay: " + result.description() }
+                                SecureLicenseStore.clear(this@MainActivity)
+                                keyText = ""
+                                expiry = 0L
+                                freshServerTime = 0L
+                                "Overlay detenido y key local eliminada. La licencia del servidor no se revoca."
                             }
                         }, enabled = !busy, modifier = Modifier.weight(1f)) { Text("Cerrar sesión") }
                     }
@@ -203,7 +259,12 @@ class MainActivity : ComponentActivity() {
                     ) { Text("▶  Iniciar overlay y Free Fire") }
                     OutlinedButton(
                         enabled = !busy && rootReady, modifier = Modifier.fillMaxWidth(),
-                        onClick = { runJob("Detener overlay") { stopNow().description() } }
+                        onClick = { runJob("Detener overlay") {
+                            val result = stopNow()
+                            require(result.exit == 0) { result.description() }
+                            LicenseNotifications.show(this@MainActivity, "Zaid Hack", "Overlay detenido.")
+                            result.description()
+                        } }
                     ) { Text("■  Detener overlay") }
                     Text("Solo se detiene el ejecutable de Zaid Hack, nunca el proceso del juego.", color = Muted, fontSize = 12.sp)
                 }
@@ -222,6 +283,40 @@ class MainActivity : ComponentActivity() {
                         "El archivo importado no se sube a GitHub ni a otros servidores.",
                     color = Muted, fontSize = 11.sp
                 )
+                } else if (currentTab == 1) {
+                    CardBlock {
+                        Text("Diagnóstico en vivo", color = Pale, style = MaterialTheme.typography.titleLarge)
+                        Text("Estado: " + liveStatus, color = MaterialTheme.colorScheme.primary)
+                        Text("Root: " + if (rootReady) "Concedido" else "No disponible", color = Muted)
+                        Text("ABI: " + Build.SUPPORTED_ABIS.joinToString(), color = Muted)
+                        Text("Android: " + Build.VERSION.RELEASE, color = Muted)
+                        Button(onClick = { runJob("Revisar procesos y logs") {
+                            root("id; cat /proc/uptime; tail -n 30 /data/local/tmp/overlay.log; tail -n 20 /data/local/tmp/zaid_license_watch.log").description()
+                        } }, enabled = !busy && rootReady, modifier = Modifier.fillMaxWidth()) { Text("Actualizar diagnóstico") }
+                        if (busy) LinearProgressIndicator(modifier = Modifier.fillMaxWidth())
+                        Text(log, color = Muted, fontSize = 12.sp)
+                    }
+                } else {
+                    CardBlock {
+                        Text("Preferencias Monet rosa", color = Pale, style = MaterialTheme.typography.titleLarge)
+                        Text("Tema rosa Material 3 activo. Interfaz adaptada para Android 12 o superior.", color = Muted)
+                        Text("Notificaciones: " + if (notificationsAllowed) "Permitidas" else "Sin permiso", color = Muted)
+                        FilledTonalButton(onClick = {
+                            if (Build.VERSION.SDK_INT >= 33) {
+                                alertPermission.launch(Manifest.permission.POST_NOTIFICATIONS)
+                            } else {
+                                notificationsAllowed = true
+                                LicenseNotifications.show(this@MainActivity, "Avisos activados", "Licencia ZH.")
+                            }
+                        }, modifier = Modifier.fillMaxWidth()) { Text("Activar notificaciones") }
+                        Text("Avisos de vencimiento mientras la aplicación está abierta; el watchdog root continúa aunque cierres esta pantalla.",
+                            color = Muted, fontSize = 12.sp)
+                        OutlinedButton(onClick = { runJob("Comprobar licencia") { verifyAndSave(keyText) } },
+                            enabled = !busy && keyText.isNotBlank(), modifier = Modifier.fillMaxWidth()) {
+                            Text("Verificar licencia en Supabase")
+                        }
+                    }
+                }
             }
         }
     }
@@ -331,8 +426,11 @@ class MainActivity : ComponentActivity() {
             }
             val expiresAt = response.getString("expires_at")
             val seconds = OffsetDateTime.parse(expiresAt).toEpochSecond()
-            require(seconds > System.currentTimeMillis() / 1000L) { "La key ya venció." }
-            return LicenseResult(seconds, expiresAt)
+            val serverDateMs = connection.getHeaderFieldDate("Date", -1L)
+            require(serverDateMs > 0L) { "La respuesta HTTPS no contiene una fecha de servidor verificable." }
+            val serverEpoch = serverDateMs / 1000L
+            require(seconds > serverEpoch) { "La key ya venció." }
+            return LicenseResult(seconds, expiresAt, serverEpoch, SystemClock.elapsedRealtime())
         } finally {
             connection.disconnect()
         }
@@ -341,9 +439,13 @@ class MainActivity : ComponentActivity() {
     private fun verifyAndSave(key: String): String {
         val clean = key.trim().uppercase()
         val license = verifyRemote(clean)
-        prefs.edit().putString("key", clean).putLong("expiry", license.expiry).apply()
+        SecureLicenseStore.save(this, clean)
+        prefs.edit().putLong("expiry", license.expiry).apply()
         expiry = license.expiry
-        return "Licencia verificada por Supabase.\nVence UTC: " + license.expiresAt
+        freshServerTime = license.serverEpoch
+        verifiedElapsedMs = license.validatedElapsedMs
+        LicenseNotifications.show(this, "Key ZH activada", "Vence: " + license.expiresAt)
+        return "Licencia cifrada y verificada por Supabase.\nVence UTC: " + license.expiresAt
     }
 
     private fun stageAsset(name: String): File {
@@ -357,22 +459,28 @@ class MainActivity : ComponentActivity() {
     private fun startNow(): String {
         require(imported) { "Importa primero Zaid-Hack-v1.3.sh." }
         require(Build.SUPPORTED_ABIS.contains("arm64-v8a")) { "Requiere procesador ARM64." }
-        val savedKey = prefs.getString("key", "") ?: ""
+        val savedKey = SecureLicenseStore.read(this) ?: ""
         require(savedKey.isNotBlank()) { "Activa primero tu licencia ZH." }
         val verified = verifyRemote(savedKey)
         prefs.edit().putLong("expiry", verified.expiry).apply()
         expiry = verified.expiry
+        freshServerTime = verified.serverEpoch
+        verifiedElapsedMs = verified.validatedElapsedMs
         val start = stageAsset("start.sh")
         val stop = stageAsset("stop.sh")
         val watcher = stageAsset("watch.sh")
         val cleanup = root("/system/bin/sh " + quoted(stop.absolutePath))
         require(cleanup.exit == 0) { "No se pudo detener la instancia previa: " + cleanup.output }
+        val elapsedSeconds = ((SystemClock.elapsedRealtime() - verified.validatedElapsedMs).coerceAtLeast(0L)) / 1000L
+        val remainingSeconds = verified.expiry - verified.serverEpoch - elapsedSeconds
+        require(remainingSeconds > 0L) { "Key ZH vencida antes de iniciar." }
         val command = "/system/bin/sh " + quoted(start.absolutePath) + " " +
             quoted(File(filesDir, "overlay-arm64").absolutePath) + " " +
             verified.expiry.toString() + " " + sha256(savedKey.toByteArray()) + " " +
             quoted(watcher.absolutePath)
         val result = root(command)
         require(result.exit == 0) { "No se pudo iniciar: " + result.description() }
+        LicenseNotifications.show(this, "Zaid Hack activo", "Overlay iniciado y vigilado hasta el vencimiento.")
         return "Licencia verificada. " + result.output +
             "\nVigencia supervisada hasta: " + verified.expiresAt
     }
@@ -383,6 +491,17 @@ class MainActivity : ComponentActivity() {
     }
 
     private fun quoted(path: String): String = "'" + path.replace("'", "'\\''") + "'"
+
+    private fun queryOverlayStatus(): String {
+        val command = "p=\$(cat /data/local/tmp/zaid_overlay.pid 2>/dev/null); " +
+            "case \"\$p\" in ''|*[!0-9]*) echo detenido; exit 0;; esac; " +
+            "e=\$(readlink /proc/\$p/exe 2>/dev/null); " +
+            "case \"\$e\" in /data/local/tmp/zig_liberdade_exec|'/data/local/tmp/zig_liberdade_exec (deleted)') " +
+            "echo activo PID=\$p; grep VmRSS /proc/\$p/status 2>/dev/null;; " +
+            "*) echo detenido;; esac"
+        val result = root(command)
+        return if (result.exit == 0) result.output.trim().take(160) else "No disponible"
+    }
 
     private fun root(command: String): CommandResult {
         val process = ProcessBuilder("su", "-c", command).redirectErrorStream(true).start()
