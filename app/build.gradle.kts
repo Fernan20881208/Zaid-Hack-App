@@ -11,8 +11,8 @@ android {
         applicationId = "com.zaidhack.pink"
         minSdk = 31
         targetSdk = 35
-        versionCode = 4
-        versionName = "1.3.0"
+        versionCode = 5
+        versionName = "1.4.0"
         ndk {
             abiFilters += setOf("arm64-v8a")
         }
