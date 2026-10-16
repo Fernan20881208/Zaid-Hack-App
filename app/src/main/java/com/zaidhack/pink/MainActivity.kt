@@ -69,6 +69,7 @@ class MainActivity : ComponentActivity() {
     private lateinit var prefs: SharedPreferences
     private var imported by mutableStateOf(false)
     private var importedHash by mutableStateOf("")
+    private var bundled by mutableStateOf(false)
     private var rootReady by mutableStateOf(false)
     private var busy by mutableStateOf(false)
     private var log by mutableStateOf("Importa el Zaid-Hack-v1.3.sh desde Descargas para comenzar.")
@@ -116,11 +117,20 @@ class MainActivity : ComponentActivity() {
                 MainScreen()
             }
         }
-        runJob("Diagnóstico root") {
+        runJob("Preparando Zaid Hack todo en uno") {
+            val integration = EmbeddedPayload.install(this@MainActivity)
+            if (integration != null) {
+                imported = true
+                bundled = true
+                importedHash = integration.sha256
+                prefs.edit().putString("elf_sha", integration.sha256).apply()
+            }
             val result = root("id -u")
             rootReady = result.exit == 0 && result.output.trim() == "0"
-            if (rootReady) "Root concedido. KernelSU, Magisk o su compatible."
-            else "Root no disponible o permiso rechazado: " + result.description()
+            val rootMessage = if (rootReady) "Root concedido." else
+                "Root no disponible o permiso rechazado: " + result.description()
+            if (bundled) "Streamer v1.5 integrado y verificado (SHA-256).\n" + rootMessage
+            else "Compilación pública sin ELF integrado; importa el script manualmente.\n" + rootMessage
         }
     }
 
@@ -196,7 +206,7 @@ class MainActivity : ComponentActivity() {
                     Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
                         Text("ZAID HACK", color = MaterialTheme.colorScheme.primary,
                             style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
-                        Text("Pink Control v1.3", color = MaterialTheme.colorScheme.onBackground,
+                        Text("All-in-One v1.4", color = MaterialTheme.colorScheme.onBackground,
                             style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
                         Text("Android 12+ · ARM64 · Root",
                             color = MaterialTheme.colorScheme.onSurfaceVariant, fontSize = 12.sp)
@@ -223,17 +233,27 @@ class MainActivity : ComponentActivity() {
                     Spacer(Modifier.height(8.dp))
                     Text(if (rootReady) "● Root autorizado" else "○ Root pendiente", color = if (rootReady) Pink else Muted)
                     Text(if (Build.SUPPORTED_ABIS.contains("arm64-v8a")) "● ARM64 compatible" else "○ Requiere ARM64", color = Muted)
-                    Text(if (imported) "● Ejecutable importado" else "○ Falta importar tu script", color = Muted)
+                    Text(
+                        if (bundled) "● Streamer v1.5 integrado (no requiere archivo .sh)"
+                        else if (imported) "● Ejecutable importado"
+                        else "○ Falta importar script (.sh)",
+                        color = if (bundled) MaterialTheme.colorScheme.primary else Muted
+                    )
                     Text("Overlay: " + liveStatus, color = Muted, fontSize = 12.sp)
                     if (importedHash.isNotBlank()) {
                         Text("SHA-256: " + importedHash.take(18) + "…", color = Muted, fontSize = 11.sp)
                     }
                     Spacer(Modifier.height(6.dp))
-                    FilledTonalButton(
-                        onClick = { picker.launch(arrayOf("*/*")) },
-                        enabled = !busy,
-                        modifier = Modifier.fillMaxWidth()
-                    ) { Text(if (imported) "Cambiar archivo .sh" else "Importar script Zaid Hack (.sh)") }
+                    if (!bundled) {
+                        FilledTonalButton(
+                            onClick = { picker.launch(arrayOf("*/*")) },
+                            enabled = !busy,
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(if (imported) "Cambiar archivo .sh" else "Importar script Zaid Hack (.sh)") }
+                    } else {
+                        Text("APK autónoma: no se necesita Termux ni descargar el .sh.",
+                            color = Muted, fontSize = 12.sp)
+                    }
                 }
                 CardBlock {
                     Text("Licencia ZH", color = Pale, fontWeight = FontWeight.SemiBold)
@@ -315,6 +335,20 @@ class MainActivity : ComponentActivity() {
                         Text("Root: " + if (rootReady) "Concedido" else "No disponible", color = Muted)
                         Text("ABI: " + Build.SUPPORTED_ABIS.joinToString(), color = Muted)
                         Text("Android: " + Build.VERSION.RELEASE, color = Muted)
+                        Text("Paquete ELF: " + if (bundled) "Streamer v1.5 integrado" else "Importación manual",
+                            color = Muted)
+                        if (bundled) {
+                            FilledTonalButton(
+                                onClick = { runJob("Salud del Streamer") {
+                                    val path = File(filesDir, EmbeddedPayload.ASSET_NAME).absolutePath
+                                    val result = root("/system/bin/sh " + quoted(path) + " --health")
+                                    require(result.exit == 0) { result.description() }
+                                    result.output
+                                } },
+                                enabled = !busy && rootReady,
+                                modifier = Modifier.fillMaxWidth()
+                            ) { Text("Estado JSON del script v1.5") }
+                        }
                         Button(onClick = { runJob("Revisar procesos y logs") {
                             root("id; cat /proc/uptime; tail -n 30 /data/local/tmp/overlay.log; tail -n 20 /data/local/tmp/zaid_license_watch.log").description()
                         } }, enabled = !busy && rootReady, modifier = Modifier.fillMaxWidth()) { Text("Actualizar diagnóstico") }
@@ -561,7 +595,7 @@ class MainActivity : ComponentActivity() {
                         .replace(Regex("ZH-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}-[A-Fa-f0-9]{4}"), "ZH-****-****-****")
                         .replace(Regex("(?i)(key|token|secret)[=:][^\\s,;]+"), "$1=[OCULTO]")
                     buildString {
-                        appendLine("Zaid Hack Pink Control v1.3")
+                        appendLine("Zaid Hack All-in-One v1.4")
                         appendLine("Android: " + Build.VERSION.RELEASE)
                         appendLine("ABI: " + Build.SUPPORTED_ABIS.joinToString())
                         appendLine("Root: " + if (rootReady) "Sí" else "No")
@@ -573,7 +607,7 @@ class MainActivity : ComponentActivity() {
                         append(cleaned)
                     }
                 }
-                documentPicker.launch("Zaid-Hack-Diagnostico-v1.3.txt")
+                documentPicker.launch("Zaid-Hack-Diagnostico-v1.4.txt")
                 log = "Elige dónde guardar el informe."
             } catch (e: Exception) {
                 diagnosticDraft = ""

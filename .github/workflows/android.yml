@@ -29,6 +29,43 @@ jobs:
         run: |
           test -d "$ANDROID_HOME"
           echo "SDK is available"
+      - name: Check optional private bundled Streamer
+        run: |
+          ASSET="app/src/main/assets/Zaid-Hack-v1.5-Streamer.sh"
+          if [ -f "$ASSET" ]; then
+            echo "137fe5c326eb79dcf9d687fadfbcef040661d3b92eeef424ec1b628ad5d90ddb  $ASSET" | sha256sum -c -
+            grep -q '^__PAYLOAD__        run: gradle --no-daemon :app:assembleDebug
+      - name: Verify APK artifact
+        run: test -s app/build/outputs/apk/debug/app-debug.apk
+      - name: Package Pink Monet source patch
+        run: |
+          zip -q Zaid-Hack-App-Monet-Pink-Patch.zip \
+            app/src/main/java/com/zaidhack/pink/MainActivity.kt \
+            app/src/main/java/com/zaidhack/pink/ui/theme/ZaidHackTheme.kt \
+            app/src/main/res/drawable/logo_zh.webp \
+            app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml \
+            app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml \
+            app/src/main/res/values/colors.xml \
+            app/src/main/AndroidManifest.xml \
+            app/build.gradle.kts \
+            patches/pink-monet/README.md
+      - name: Upload Pink Monet patch
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zaid-Hack-Monet-Pink-Patch
+          path: Zaid-Hack-App-Monet-Pink-Patch.zip
+          if-no-files-found: error
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Zaid-Hack-Pink-Android12-ARM64-debug
+          path: app/build/outputs/apk/debug/app-debug.apk
+          if-no-files-found: error
+ "$ASSET"
+            echo "Private all-in-one asset is present and verified"
+          else
+            echo "PUBLIC SOURCE BUILD ONLY: private ELF is not included in this APK"
+          fi
       - name: Build signed debug APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Verify APK artifact

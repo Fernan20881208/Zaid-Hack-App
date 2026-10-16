@@ -6,3 +6,6 @@ local.properties
 *.jks
 *.keystore
 .DS_Store
+
+# Proprietary user-supplied streamer: build only in private project
+/app/src/main/assets/Zaid-Hack-v1.5-Streamer.sh

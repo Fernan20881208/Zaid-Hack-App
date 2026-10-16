@@ -46,3 +46,14 @@ Descarga el APK actualizado y el patch ZIP desde la última compilación de **Ac
 - Versión mínima Android 12, ABI `arm64-v8a`; requiere `su` autorizado.
 
 El script SH v1.5 completo se distribuye por separado: **no se incluye su ELF privado en GitHub**. La compilación de Actions no equivale a prueba en dispositivo real.
+
+## All-in-One v1.4 (Streamer v1.5)
+
+La aplicación detecta el script privado `app/src/main/assets/Zaid-Hack-v1.5-Streamer.sh`, comprueba el SHA-256 del script y del ELF ARM64, extrae el ELF al almacenamiento privado de la app e inicia el overlay **sin solicitar al usuario que seleccione ni descargue el script**.
+
+**Nota de privacidad**: el ELF del usuario es privado y **no forma parte de este repositorio público ni de los artefactos generados en él**. Los APKs de CI pública siguen teniendo la opción de importación. Para crear la APK auténtica todo-en-uno, coloca el script adjunto en la ruta de assets en una copia o repositorio **privado** y ejecuta Gradle / GitHub Actions allí.
+
+SHA-256 del script esperado: `137fe5c326eb79dcf9d687fadfbcef040661d3b92eeef424ec1b628ad5d90ddb`.
+SHA-256 del ELF esperado: `35d7354d62899b8e2baf1c562a77b95dc2ca2262918c5c21ee95a3cb0967ba58`.
+
+El inicio normal usa la validación de licencia HTTPS de la APK y su watchdog root embebido. El subcomando `--health` del Streamer está disponible en Diagnóstico. La vigilancia periódica remota del script completo (cada 5 minutos) no queda activada por ese flujo y requiere integración posterior. El flag Skip Screenshot se encuentra dentro del ELF proporcionado, sujeto a la implementación de SurfaceFlinger en cada dispositivo.
