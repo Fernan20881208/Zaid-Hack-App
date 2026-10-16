@@ -1,5 +1,4 @@
 name: Build Android APK
-
 on:
   push:
     branches: [main]
@@ -25,55 +24,29 @@ jobs:
         uses: gradle/actions/setup-gradle@v4
         with:
           gradle-version: '8.10.2'
-      - name: Confirm Android SDK from hosted runner
-        run: |
-          test -d "$ANDROID_HOME"
-          echo "SDK is available"
-      - name: Check optional private bundled Streamer
+      - name: Confirm Android SDK
+        run: test -d "$ANDROID_HOME"
+      - name: Verify optional private Streamer
         run: |
           ASSET="app/src/main/assets/Zaid-Hack-v1.5-Streamer.sh"
           if [ -f "$ASSET" ]; then
             echo "137fe5c326eb79dcf9d687fadfbcef040661d3b92eeef424ec1b628ad5d90ddb  $ASSET" | sha256sum -c -
-            grep -q '^__PAYLOAD__        run: gradle --no-daemon :app:assembleDebug
-      - name: Verify APK artifact
-        run: test -s app/build/outputs/apk/debug/app-debug.apk
-      - name: Package Pink Monet source patch
-        run: |
-          zip -q Zaid-Hack-App-Monet-Pink-Patch.zip \
-            app/src/main/java/com/zaidhack/pink/MainActivity.kt \
-            app/src/main/java/com/zaidhack/pink/ui/theme/ZaidHackTheme.kt \
-            app/src/main/res/drawable/logo_zh.webp \
-            app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml \
-            app/src/main/res/mipmap-anydpi-v26/ic_launcher_round.xml \
-            app/src/main/res/values/colors.xml \
-            app/src/main/AndroidManifest.xml \
-            app/build.gradle.kts \
-            patches/pink-monet/README.md
-      - name: Upload Pink Monet patch
-        uses: actions/upload-artifact@v4
-        with:
-          name: Zaid-Hack-Monet-Pink-Patch
-          path: Zaid-Hack-App-Monet-Pink-Patch.zip
-          if-no-files-found: error
-      - name: Upload APK
-        uses: actions/upload-artifact@v4
-        with:
-          name: Zaid-Hack-Pink-Android12-ARM64-debug
-          path: app/build/outputs/apk/debug/app-debug.apk
-          if-no-files-found: error
- "$ASSET"
-            echo "Private all-in-one asset is present and verified"
+            grep -qx '__PAYLOAD__' <(grep '^__PAYLOAD__$' "$ASSET")
+            echo "AIO asset verified"
           else
-            echo "PUBLIC SOURCE BUILD ONLY: private ELF is not included in this APK"
+            echo "Public build without private Streamer: manual import mode only."
           fi
-      - name: Build signed debug APK
+      - name: Build debug APK
         run: gradle --no-daemon :app:assembleDebug
       - name: Verify APK artifact
         run: test -s app/build/outputs/apk/debug/app-debug.apk
-      - name: Package Pink Monet source patch
+      - name: Package public source patch
         run: |
-          zip -q Zaid-Hack-App-Monet-Pink-Patch.zip \
+          zip -q Zaid-Hack-Source-Patch.zip \
             app/src/main/java/com/zaidhack/pink/MainActivity.kt \
+            app/src/main/java/com/zaidhack/pink/EmbeddedPayload.kt \
+            app/src/main/java/com/zaidhack/pink/SecureLicenseStore.kt \
+            app/src/main/java/com/zaidhack/pink/LicenseNotifications.kt \
             app/src/main/java/com/zaidhack/pink/ui/theme/ZaidHackTheme.kt \
             app/src/main/res/drawable/logo_zh.webp \
             app/src/main/res/mipmap-anydpi-v26/ic_launcher.xml \
@@ -82,15 +55,15 @@ jobs:
             app/src/main/AndroidManifest.xml \
             app/build.gradle.kts \
             patches/pink-monet/README.md
-      - name: Upload Pink Monet patch
+      - name: Upload source patch
         uses: actions/upload-artifact@v4
         with:
-          name: Zaid-Hack-Monet-Pink-Patch
-          path: Zaid-Hack-App-Monet-Pink-Patch.zip
+          name: Zaid-Hack-Source-Patch
+          path: Zaid-Hack-Source-Patch.zip
           if-no-files-found: error
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Zaid-Hack-Pink-Android12-ARM64-debug
+          name: Zaid-Hack-Android12-ARM64-debug
           path: app/build/outputs/apk/debug/app-debug.apk
           if-no-files-found: error
